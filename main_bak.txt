@@ -1,0 +1,74 @@
+const fs = require('fs');
+const pdfParse = require('pdf-parse');
+const xlsx = require('xlsx');
+
+const pdfFilePath = 'stcc_raw_data.pdf'; // Ensure this path is correct
+
+const extractDataFromPDF = async (pdfPath) => {
+  const dataBuffer = fs.readFileSync(pdfPath);
+  try {
+    const data = await pdfParse(dataBuffer);
+    const lines = data.text.split('\n');
+    const entries = [];
+    let currentRecord = {};
+
+    console.log(`Total lines to process: ${lines.length}`);
+
+    lines.forEach((line, index) => {
+      line = line.trim();
+      console.log(`Processing line ${index + 1}: ${line}`);
+
+      // Identify the start of a new record by a date pattern and reset the currentRecord if it's populated
+      if (line.match(/^\d{2}\/\d{2}\/\d{2}/)) {
+        if (Object.keys(currentRecord).length > 0) {
+          entries.push(currentRecord);
+          currentRecord = {};
+        }
+
+        currentRecord.bookingDate = line.match(/^\d{2}\/\d{2}\/\d{2}/)[0];
+        currentRecord.releaseDate = 'Not Available'; // Default if not found later
+      } else if (line.match(/^[A-Z]+, [A-Z]+/)) { // Line starts with a name
+        const [lastName, rest] = line.split(', ');
+        const [firstName, ...middleNameParts] = rest.split(' ');
+        currentRecord.lastName = lastName;
+        currentRecord.firstName = firstName;
+        currentRecord.middleName = middleNameParts.join(' ');
+      } else if (line.includes('Release Date:')) {
+        currentRecord.releaseDate = line.split('Release Date:')[1].trim();
+      } else if (line.length > 0 && !line.match(/Page \d+ of \d+/)) {
+        // Assuming this line could contain address or charge information
+        if (!currentRecord.address) {
+          currentRecord.address = line;
+        } else if (!currentRecord.charge) {
+          currentRecord.charge = line;
+        } else {
+          // Additional information, could be city, state, ZIP if not already captured
+          if (!currentRecord.cityStateZip) {
+            currentRecord.cityStateZip = line;
+            const parts = line.split(' ');
+            const zip = parts.pop(); // Assuming the last part is ZIP
+            currentRecord.zip = zip;
+            currentRecord.cityState = parts.join(' ');
+          }
+        }
+      }
+    });
+
+    // Add the last record if it exists
+    if (Object.keys(currentRecord).length > 0) {
+      entries.push(currentRecord);
+    }
+
+    console.log(`Total entries: ${entries.length}`);
+
+    // Creating Excel file
+    const worksheet = xlsx.utils.json_to_sheet(entries, {header: ["lastName", "firstName", "middleName", "bookingDate", "releaseDate", "address", "cityState", "zip", "charge"]});
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Inmates');
+    xlsx.writeFile(workbook, 'InmateRecords.xlsx');
+  } catch (error) {
+    console.error('Error processing PDF:', error);
+  }
+};
+
+extractDataFromPDF(pdfFilePath);

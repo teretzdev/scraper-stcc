@@ -1,0 +1,240 @@
+List of JavaScript files and their sizes: 
+File: D:\STCC\main.js Size: 4607 bytes 
+File: D:\STCC\_main.js Size: 4607 bytes 
+ 
+===== Compiled JavaScript Files ===== 
+ 
+===== D:\STCC\main.js ===== 
+const fs = require('fs');
+const pdfParse = require('pdf-parse');
+const xlsx = require('xlsx');
+
+const pdfFilePath = 'stcc_raw_data.pdf'; // Update this path to your actual PDF file
+
+const extractDataFromPDF = async (pdfPath) => {
+  const dataBuffer = fs.readFileSync(pdfPath);
+  try {
+    const data = await pdfParse(dataBuffer);
+    const lines = data.text.split('\n');
+    const entries = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      if (line === '' || line.match(/^page \d+ of \d+$/i) || line.match(/crossed out pattern/) || line.match(/inmate\s+book date\s+release\s+days/i)) {
+        continue;
+      }
+
+      if (line.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+        continue;
+      }
+
+      if (line.match(/^[A-Z]+, [A-Z]+/)) {
+        const nameParts = line.split(' ');
+        if (nameParts.length < 3) continue; // Check for nameParts length
+        const lastName = nameParts[0].replace(',', '');
+        const firstName = nameParts[1];
+        const middleName = nameParts[2];
+
+        const datesLine = lines[++i]?.trim(); // Use optional chaining to prevent TypeError
+        const datePattern = /\d{2}\/\d{2}\/\d{2}/g;
+        const trailingNumberPattern = /\d+$/;
+
+        const dates = datesLine?.match(datePattern); // Use optional chaining
+        if (!dates || dates.length < 2) continue; // Check if dates array has at least 2 elements
+
+        const trailingNumberMatch = datesLine?.match(trailingNumberPattern); // Use optional chaining
+        if (!trailingNumberMatch) continue; // Check if trailingNumberMatch is not null
+        const trailingNumber = trailingNumberMatch[0];
+
+        const bookingDate = dates[0];
+        let releaseDate = dates[1];
+        let daysDetained = trailingNumber;
+
+        let nextAddressLine = lines[++i]?.trim(); // Use optional chaining
+        if (!nextAddressLine) continue; // Check if nextAddressLine is not null
+
+        nextAddressLine = await removeTrailingComma(nextAddressLine);
+
+        const cityStateZipLine = lines[++i]?.trim(); // Use optional chaining
+        if (!cityStateZipLine) continue; // Check if cityStateZipLine is not null
+
+        const zipRegex = /\b\d{5}\b/;
+        const zipMatch = cityStateZipLine.match(zipRegex);
+        const zip = zipMatch ? zipMatch[0] : '63301';
+
+        const cleanedCityStateZipLine = cityStateZipLine.replace(/,$/, '');
+        const cityState = zip ? cleanedCityStateZipLine.replace(zip, '').trim() : cleanedCityStateZipLine.trim();
+        let [city, state] = cityState.split(',').map(part => part.trim());
+        state = state || 'MO'; // Default to 'MO' if state is not found
+
+        releaseDate = await calculateReleaseDate(bookingDate, trailingNumber, releaseDate);
+
+        const followingLine = lines[++i]?.trim(); // Use optional chaining
+        if (!followingLine) continue; // Check if followingLine is not null
+
+        const chargeInfo = followingLine.split(' - ')[1];
+
+        entries.push({
+          LastName: lastName,
+          FirstName: firstName,
+          Address: nextAddressLine,
+          City: city.trim(),
+          State: state,
+          Zip: zip,
+          Offense: chargeInfo,
+          BookDate: bookingDate,
+          ReleaseDate: releaseDate
+        });
+      }
+    }
+
+    console.log(`Total entries: ${entries.length}`);
+
+    const worksheet = xlsx.utils.json_to_sheet(entries);
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Inmates');
+    xlsx.writeFile(workbook, 'InmateRecords.xlsx');
+  } catch (error) {
+    console.error('Error reading PDF:', error);
+  }
+};
+
+async function removeTrailingComma(address) {
+  return address.endsWith(',') ? address.slice(0, -1) : address;
+}
+
+async function calculateReleaseDate(bookingDate, trailingNumber, releaseDate) {
+    if (!releaseDate) {
+      const [month, day, year] = bookingDate.split('/');
+      const releaseDateTime = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10) + parseInt(trailingNumber, 10));
+      
+      const formattedMonth = (releaseDateTime.getMonth() + 1).toString().padStart(2, '0');
+      const formattedDay = releaseDateTime.getDate().toString().padStart(2, '0');
+      const formattedYear = releaseDateTime.getFullYear().toString().slice(2); // Use slice to get the last 2 digits of the year
+      
+      return `${formattedMonth}/${formattedDay}/${formattedYear}`;
+    } else {
+      return releaseDate;
+    }
+  }
+  
+
+extractDataFromPDF(pdfFilePath); 
+===== D:\STCC\_main.js ===== 
+const fs = require('fs');
+const pdfParse = require('pdf-parse');
+const xlsx = require('xlsx');
+
+const pdfFilePath = 'stcc_raw_data.pdf'; // Update this path to your actual PDF file
+
+const extractDataFromPDF = async (pdfPath) => {
+  const dataBuffer = fs.readFileSync(pdfPath);
+  try {
+    const data = await pdfParse(dataBuffer);
+    const lines = data.text.split('\n');
+    const entries = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      if (line === '' || line.match(/^page \d+ of \d+$/i) || line.match(/crossed out pattern/) || line.match(/inmate\s+book date\s+release\s+days/i)) {
+        continue;
+      }
+
+      if (line.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+        continue;
+      }
+
+      if (line.match(/^[A-Z]+, [A-Z]+/)) {
+        const nameParts = line.split(' ');
+        if (nameParts.length < 3) continue; // Check for nameParts length
+        const lastName = nameParts[0].replace(',', '');
+        const firstName = nameParts[1];
+        const middleName = nameParts[2];
+
+        const datesLine = lines[++i]?.trim(); // Use optional chaining to prevent TypeError
+        const datePattern = /\d{2}\/\d{2}\/\d{2}/g;
+        const trailingNumberPattern = /\d+$/;
+
+        const dates = datesLine?.match(datePattern); // Use optional chaining
+        if (!dates || dates.length < 2) continue; // Check if dates array has at least 2 elements
+
+        const trailingNumberMatch = datesLine?.match(trailingNumberPattern); // Use optional chaining
+        if (!trailingNumberMatch) continue; // Check if trailingNumberMatch is not null
+        const trailingNumber = trailingNumberMatch[0];
+
+        const bookingDate = dates[0];
+        let releaseDate = dates[1];
+        let daysDetained = trailingNumber;
+
+        let nextAddressLine = lines[++i]?.trim(); // Use optional chaining
+        if (!nextAddressLine) continue; // Check if nextAddressLine is not null
+
+        nextAddressLine = await removeTrailingComma(nextAddressLine);
+
+        const cityStateZipLine = lines[++i]?.trim(); // Use optional chaining
+        if (!cityStateZipLine) continue; // Check if cityStateZipLine is not null
+
+        const zipRegex = /\b\d{5}\b/;
+        const zipMatch = cityStateZipLine.match(zipRegex);
+        const zip = zipMatch ? zipMatch[0] : '63301';
+
+        const cleanedCityStateZipLine = cityStateZipLine.replace(/,$/, '');
+        const cityState = zip ? cleanedCityStateZipLine.replace(zip, '').trim() : cleanedCityStateZipLine.trim();
+        let [city, state] = cityState.split(',').map(part => part.trim());
+        state = state || 'MO'; // Default to 'MO' if state is not found
+
+        releaseDate = await calculateReleaseDate(bookingDate, trailingNumber, releaseDate);
+
+        const followingLine = lines[++i]?.trim(); // Use optional chaining
+        if (!followingLine) continue; // Check if followingLine is not null
+
+        const chargeInfo = followingLine.split(' - ')[1];
+
+        entries.push({
+          LastName: lastName,
+          FirstName: firstName,
+          Address: nextAddressLine,
+          City: city.trim(),
+          State: state,
+          Zip: zip,
+          Offense: chargeInfo,
+          BookDate: bookingDate,
+          ReleaseDate: releaseDate
+        });
+      }
+    }
+
+    console.log(`Total entries: ${entries.length}`);
+
+    const worksheet = xlsx.utils.json_to_sheet(entries);
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Inmates');
+    xlsx.writeFile(workbook, 'InmateRecords.xlsx');
+  } catch (error) {
+    console.error('Error reading PDF:', error);
+  }
+};
+
+async function removeTrailingComma(address) {
+  return address.endsWith(',') ? address.slice(0, -1) : address;
+}
+
+async function calculateReleaseDate(bookingDate, trailingNumber, releaseDate) {
+    if (!releaseDate) {
+      const [month, day, year] = bookingDate.split('/');
+      const releaseDateTime = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10) + parseInt(trailingNumber, 10));
+      
+      const formattedMonth = (releaseDateTime.getMonth() + 1).toString().padStart(2, '0');
+      const formattedDay = releaseDateTime.getDate().toString().padStart(2, '0');
+      const formattedYear = releaseDateTime.getFullYear().toString().slice(2); // Use slice to get the last 2 digits of the year
+      
+      return `${formattedMonth}/${formattedDay}/${formattedYear}`;
+    } else {
+      return releaseDate;
+    }
+  }
+  
+
+extractDataFromPDF(pdfFilePath); 
